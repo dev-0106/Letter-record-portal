@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Letter Record Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Firebase (Firestore only — login is handled with our own username/password check, same as the Drawing portal) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+:root{
+  --navy:#0B2545;
+  --navy-light:#123A66;
+  --navy-lighter:#1B4A7A;
+  --paper:#F5F2EA;
+  --paper-dim:#E9E4D8;
+  --line:#7FA8D9;
+  --line-dim:#3E6491;
+  --accent:#E8871E;
+  --accent-dim:#B8660F;
+  --ink:#14213D;
+  --success:#4C9A6A;
+  --danger:#C1443C;
+  --danger-dim:#8f332c;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;height:100%;}
+body{
+  font-family:'IBM Plex Sans',sans-serif;
+  background:var(--navy);
+  color:var(--paper);
+  min-height:100vh;
+  background-image:
+    linear-gradient(rgba(127,168,217,0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(127,168,217,0.07) 1px, transparent 1px);
+  background-size:28px 28px;
+}
+h1,h2,h3,h4{font-family:'Space Grotesk',sans-serif;margin:0;}
+.mono{font-family:'IBM Plex Mono',monospace;}
+a{color:inherit;}
+button{font-family:inherit;cursor:pointer;}
+::selection{background:var(--accent);color:var(--navy);}
+
+/* ---------- Screen container ---------- */
+.screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;}
+.hidden{display:none !important;}
+
+/* ---------- Auth ---------- */
+.auth-wrap{width:100%;max-width:420px;}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:28px;}
+.brand .mark{
+  width:44px;height:44px;border:2px solid var(--accent);border-radius:4px;
+  display:flex;align-items:center;justify-content:center;position:relative;flex-shrink:0;
+}
+.brand .mark::before,.brand .mark::after{content:"";position:absolute;background:var(--accent);}
+.brand .mark::before{width:18px;height:2px;}
+.brand .mark::after{width:2px;height:18px;}
+.brand h1{font-size:20px;letter-spacing:0.3px;}
+.brand .sub{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--line);margin-top:2px;}
+
+.panel{
+  background:var(--paper);
+  color:var(--ink);
+  border-radius:6px;
+  padding:32px;
+  border:1px solid var(--paper-dim);
+  box-shadow:0 20px 50px rgba(0,0,0,0.35);
+}
+.panel h2{font-size:19px;margin-bottom:4px;}
+.panel .hint{font-size:13px;color:#5b6478;margin-bottom:20px;}
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:12px;font-weight:600;letter-spacing:0.4px;text-transform:uppercase;color:#5b6478;margin-bottom:6px;}
+.field input,.field select,.field textarea{
+  width:100%;padding:11px 12px;border:1.5px solid #d8d3c4;border-radius:4px;
+  font-size:14px;font-family:inherit;background:#fff;color:var(--ink);
+}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--navy-lighter);}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  padding:11px 18px;border-radius:4px;border:none;font-weight:600;font-size:14px;
+  transition:transform .08s ease, filter .15s ease;
+}
+.btn:active{transform:translateY(1px);}
+.btn-primary{background:var(--accent);color:#1a0f00;width:100%;}
+.btn-primary:hover{filter:brightness(1.07);}
+.btn-ghost{background:transparent;color:var(--navy);border:1.5px solid #d8d3c4;width:100%;}
+.btn-ghost:hover{border-color:var(--navy);}
+.btn-sm{padding:6px 12px;font-size:12.5px;border-radius:4px;}
+.btn-danger{background:var(--danger);color:#fff;}
+.btn-success{background:var(--success);color:#fff;}
+.toggle-row{text-align:center;margin-top:16px;font-size:13px;color:#5b6478;}
+.toggle-row a{color:var(--navy-lighter);font-weight:600;cursor:pointer;text-decoration:underline;}
+.error-msg{background:#fbe9e7;color:var(--danger-dim);border:1px solid #f3c4bd;padding:9px 12px;border-radius:4px;font-size:13px;margin-bottom:16px;}
+.info-msg{background:#eaf1fb;color:#1f4d80;border:1px solid #c7dcf3;padding:9px 12px;border-radius:4px;font-size:13px;margin-bottom:16px;}
+
+.pending-box{text-align:center;}
+.pending-box .stamp{
+  width:76px;height:76px;border:3px solid var(--accent-dim);border-radius:50%;
+  display:flex;align-items:center;justify-content:center;margin:0 auto 18px;
+  transform:rotate(-8deg);color:var(--accent-dim);
+}
+
+/* ---------- App shell ---------- */
+#app-screen{align-items:stretch;padding:0;}
+.shell{display:flex;width:100%;min-height:100vh;}
+.sidebar{
+  width:270px;flex-shrink:0;background:var(--navy-light);border-right:1px solid rgba(127,168,217,0.25);
+  display:flex;flex-direction:column;padding:20px 16px;
+}
+.sidebar .brand{margin-bottom:22px;padding:0 4px;}
+.sidebar .brand h1{font-size:16px;}
+.crumb-nav{display:flex;flex-direction:column;gap:2px;flex:1;overflow-y:auto;}
+.crumb-item{
+  padding:10px 12px;border-radius:4px;font-size:13.5px;cursor:pointer;
+  display:flex;align-items:center;justify-content:space-between;color:#cfe0f5;
+}
+.crumb-item:hover{background:rgba(127,168,217,0.12);}
+.crumb-item.active{background:var(--accent);color:#1a0f00;font-weight:600;}
+.crumb-item .arrow{opacity:.5;font-size:12px;}
+.tree-group{margin-bottom:6px;}
+.tree-label{font-size:10.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--line);padding:14px 12px 6px;font-weight:600;}
+.sidebar-foot{padding-top:14px;border-top:1px solid rgba(127,168,217,0.2);margin-top:10px;}
+.user-chip{display:flex;align-items:center;gap:10px;padding:8px 10px;}
+.user-avatar{width:32px;height:32px;border-radius:50%;background:var(--accent);color:#1a0f00;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.user-name{font-size:13px;font-weight:600;line-height:1.2;}
+.user-role{font-size:11px;color:var(--line);}
+.link-btn{background:none;border:none;color:#cfe0f5;font-size:12.5px;padding:8px 10px;text-align:left;width:100%;border-radius:4px;}
+.link-btn:hover{background:rgba(127,168,217,0.12);}
+
+.main{flex:1;min-width:0;padding:26px 34px 60px;overflow-y:auto;}
+.topbar{display:flex;gap:14px;align-items:center;margin-bottom:26px;flex-wrap:wrap;}
+.search-box{flex:1;min-width:260px;position:relative;}
+.search-box input{
+  width:100%;padding:12px 14px 12px 40px;border-radius:6px;border:1.5px solid rgba(127,168,217,0.35);
+  background:rgba(255,255,255,0.06);color:var(--paper);font-size:14px;
+}
+.search-box input::placeholder{color:#8fa8c9;}
+.search-box input:focus{outline:none;border-color:var(--accent);}
+.search-icon{position:absolute;left:13px;top:50%;transform:translateY(-50%);opacity:.6;font-size:14px;}
+.mode-toggle{display:flex;background:rgba(255,255,255,0.06);border-radius:6px;border:1.5px solid rgba(127,168,217,0.35);overflow:hidden;}
+.mode-toggle button{padding:11px 14px;background:none;border:none;color:#cfe0f5;font-size:12.5px;font-weight:600;}
+.mode-toggle button.active{background:var(--accent);color:#1a0f00;}
+
+.breadcrumb{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--line);margin-bottom:20px;}
+.breadcrumb span.seg{cursor:pointer;padding:3px 2px;}
+.breadcrumb span.seg:hover{color:var(--paper);text-decoration:underline;}
+.breadcrumb span.sep{opacity:.4;}
+.breadcrumb span.current{color:var(--paper);font-weight:600;}
+
+.pick-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;}
+.pick-card{
+  background:var(--navy-light);border:1.5px solid rgba(127,168,217,0.25);border-radius:8px;
+  padding:22px 18px;cursor:pointer;transition:border-color .15s, transform .1s;
+}
+.pick-card:hover{border-color:var(--accent);transform:translateY(-2px);}
+.pick-card .count{font-size:11px;color:var(--line);margin-top:6px;}
+.pick-card h3{font-size:16px;}
+.pick-card .tag{display:inline-block;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:8px;font-weight:700;}
+
+.section-title{font-size:13px;letter-spacing:1px;text-transform:uppercase;color:var(--line);margin:26px 0 14px;font-weight:600;}
+.section-title:first-child{margin-top:0;}
+
+.drg-list{display:flex;flex-direction:column;gap:10px;}
+.drg-card{
+  background:var(--paper);color:var(--ink);border-radius:6px;padding:16px 18px;
+  display:flex;align-items:center;gap:16px;position:relative;border-left:4px solid var(--accent);
+}
+.drg-card .tick{position:absolute;top:6px;right:8px;font-size:9px;color:#a49d88;letter-spacing:1px;}
+.drg-info{flex:1;min-width:0;}
+.drg-info .name{font-weight:600;font-size:14.5px;margin-bottom:4px;}
+.drg-info .meta{font-size:12px;color:#6a7180;display:flex;gap:10px;flex-wrap:wrap;}
+.drg-info .num{font-family:'IBM Plex Mono',monospace;background:#eae5d7;padding:1px 7px;border-radius:3px;color:var(--navy);}
+.badge{font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:3px 8px;border-radius:3px;}
+.badge-out{background:#fde3c8;color:#8a4b09;}
+.badge-in{background:#d9e8db;color:#2f6b3f;}
+.drg-actions{display:flex;gap:8px;flex-shrink:0;}
+.icon-btn{background:none;border:1.5px solid #d8d3c4;border-radius:4px;padding:7px 9px;color:var(--navy);font-size:12px;}
+.icon-btn:hover{border-color:var(--navy);}
+
+.empty-state{text-align:center;padding:60px 20px;color:var(--line);}
+.empty-state h3{color:var(--paper);margin-bottom:8px;font-size:16px;}
+.empty-state p{font-size:13px;margin:0;}
+
+/* ---------- Admin ---------- */
+.admin-tabs{display:flex;gap:6px;margin-bottom:22px;border-bottom:1px solid rgba(127,168,217,0.25);flex-wrap:wrap;}
+.admin-tab{padding:10px 16px;background:none;border:none;color:var(--line);font-size:13px;font-weight:600;border-bottom:2px solid transparent;}
+.admin-tab.active{color:var(--paper);border-bottom-color:var(--accent);}
+.admin-card{background:var(--navy-light);border:1.5px solid rgba(127,168,217,0.25);border-radius:8px;padding:18px 20px;margin-bottom:12px;}
+.admin-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+.admin-row .who{font-size:14px;font-weight:600;}
+.admin-row .when{font-size:12px;color:var(--line);}
+.pill{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:3px 9px;border-radius:20px;}
+.pill-pending{background:#4a3200;color:#ffcf6b;}
+.pill-approved{background:#0f3d24;color:#7be3a3;}
+.pill-admin{background:#3a1a5c;color:#d6b3ff;}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.form-grid .full{grid-column:1/-1;}
+.form-grid label{display:block;font-size:11.5px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--line);margin-bottom:6px;}
+.form-grid input,.form-grid select,.form-grid textarea{
+  width:100%;padding:10px 12px;border-radius:4px;border:1.5px solid rgba(127,168,217,0.3);
+  background:rgba(255,255,255,0.06);color:var(--paper);font-size:13.5px;font-family:inherit;
+}
+.form-grid textarea{font-family:'IBM Plex Mono',monospace;min-height:110px;resize:vertical;}
+.form-grid input:focus,.form-grid select:focus,.form-grid textarea:focus{outline:none;border-color:var(--accent);}
+.help-text{font-size:12px;color:var(--line);margin-top:4px;line-height:1.5;}
+.toast{
+  position:fixed;bottom:22px;right:22px;background:var(--navy-light);border:1.5px solid var(--accent);
+  color:var(--paper);padding:12px 18px;border-radius:6px;font-size:13.5px;z-index:999;box-shadow:0 10px 30px rgba(0,0,0,0.4);
+}
+@media(max-width:860px){
+  .shell{flex-direction:column;}
+  .sidebar{width:100%;flex-direction:row;overflow-x:auto;padding:12px;align-items:center;}
+  .sidebar .brand{margin-bottom:0;margin-right:10px;}
+  .crumb-nav{flex-direction:row;flex:none;}
+  .sidebar-foot{display:none;}
+  .main{padding:18px 16px 40px;}
+  .form-grid{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- ===================== LOGIN / REGISTER SCREEN ===================== -->
+<div id="auth-screen" class="screen">
+  <div class="auth-wrap">
+    <div class="brand">
+      <div class="mark"></div>
+      <div>
+        <h1>Letter Record Portal</h1>
+        <div class="sub">EPC &middot; Site &amp; Head Office</div>
+      </div>
+    </div>
+
+    <div id="login-panel" class="panel">
+      <h2>Sign in</h2>
+      <div class="hint">Enter your credentials to access the letter register.</div>
+      <div id="login-error"></div>
+      <div class="field"><label>Username</label><input id="login-user" type="text" autocomplete="username"></div>
+      <div class="field"><label>Password</label><input id="login-pass" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')handleLogin()"></div>
+      <button class="btn btn-primary" onclick="handleLogin()">Sign in</button>
+      <div class="toggle-row">No account yet? <a onclick="showScreen('register')">Request access</a></div>
+    </div>
+
+    <div id="register-panel" class="panel hidden">
+      <h2>Request access</h2>
+      <div class="hint">Create your account — an admin approves it before you can browse the register.</div>
+      <div id="register-error"></div>
+      <div class="field"><label>Full name</label><input id="reg-name" type="text"></div>
+      <div class="field"><label>Username</label><input id="reg-user" type="text" autocomplete="username"></div>
+      <div class="field"><label>Password</label><input id="reg-pass" type="password" autocomplete="new-password"></div>
+      <button class="btn btn-primary" onclick="handleRegister()">Submit request</button>
+      <div class="toggle-row">Already have an account? <a onclick="showScreen('login')">Sign in</a></div>
+    </div>
+
+    <div id="pending-panel" class="panel hidden">
+      <div class="pending-box">
+        <div class="stamp">&#9203;</div>
+        <h2>Waiting for approval</h2>
+        <p class="hint" style="margin-top:10px;">Hi <b id="pending-name"></b> — your account has been created but hasn't been approved yet. Ask the admin to approve <span id="pending-username" class="mono"></span> in the portal.</p>
+        <button class="btn btn-ghost" onclick="checkPendingAgain()">Check again</button>
+        <div class="toggle-row"><a onclick="logout()">Back to sign in</a></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MAIN APP SCREEN ===================== -->
+<div id="app-screen" class="screen hidden">
+  <div class="shell">
+    <div class="sidebar">
+      <div class="brand">
+        <div class="mark"></div>
+        <div>
+          <h1>Letter Portal</h1>
+          <div class="sub" style="font-size:9px;">EPC &middot; Site &amp; HO</div>
+        </div>
+      </div>
+      <div class="crumb-nav" id="side-nav"></div>
+      <div class="sidebar-foot">
+        <div id="admin-link-wrap"></div>
+        <div class="user-chip">
+          <div class="user-avatar" id="user-avatar"></div>
+          <div>
+            <div class="user-name" id="user-name-disp"></div>
+            <div class="user-role" id="user-role-disp"></div>
+          </div>
+        </div>
+        <button class="link-btn" onclick="logout()">Sign out</button>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="topbar">
+        <div class="search-box">
+          <span class="search-icon">&#8981;</span>
+          <input id="search-input" type="text" placeholder="Search by keyword — e.g. approval, invoice, drawing submission..." oninput="onSearchInput()">
+        </div>
+        <div class="mode-toggle">
+          <button id="mode-keyword" class="active" onclick="setSearchMode('keyword')">Keyword</button>
+          <button id="mode-exact" onclick="setSearchMode('exact')">Exact Letter No.</button>
+        </div>
+      </div>
+
+      <div id="view-root"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   FIREBASE CONFIG — REPLACE THESE VALUES WITH YOUR OWN
+   Firebase Console -> Project settings -> General
+   -> "Your apps" -> SDK setup and configuration.
+   See README.md for the full step-by-step setup.
+   ============================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyA_dl8zDUw1BYW0wG4jCZ58qNe8LzzZCFc",
+  authDomain: "letter-record-portal.firebaseapp.com",
+  projectId: "letter-record-portal",
+  storageBucket: "letter-record-portal.firebasestorage.app",
+  messagingSenderId: "266494684660",
+  appId: "1:266494684660:web:7d9e810559c58b08f85da1"
+};
+
+/* ============================================================
+   STORAGE HELPERS
+   Auth        -> our own username/password check (hashed, stored in Firestore)
+   User list   -> Firestore collection "users" (one doc per account)
+   Letters     -> Firestore doc app_data/letters_db
+   ============================================================ */
+const LETTERS_KEY = 'letters_db';
+const FIRESTORE_COLLECTION = 'app_data';
+const USERS_COLLECTION = 'users';
+
+let db = null;
+let firebaseReady = false;
+try{
+  if(typeof firebaseConfig !== 'undefined' && firebaseConfig.apiKey && firebaseConfig.apiKey.indexOf('YOUR_') !== 0){
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    firebaseReady = true;
+  }
+}catch(e){ console.error('Firebase init failed', e); }
+
+async function hash(str){
+  const enc = new TextEncoder().encode(str);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+async function loadUsers(){
+  if(!firebaseReady) return [];
+  try{
+    const snap = await db.collection(USERS_COLLECTION).get();
+    return snap.docs.map(d=>({ id:d.id, ...d.data() }));
+  }catch(e){ console.error(e); return []; }
+}
+async function loadUser(uid){
+  if(!firebaseReady) return null;
+  const doc = await db.collection(USERS_COLLECTION).doc(uid).get();
+  return doc.exists ? { id:doc.id, ...doc.data() } : null;
+}
+async function saveUser(uid, patch){
+  if(!firebaseReady) throw new Error('NO_STORAGE');
+  await db.collection(USERS_COLLECTION).doc(uid).set(patch, { merge:true });
+}
+async function deleteUserDoc(uid){
+  if(!firebaseReady) throw new Error('NO_STORAGE');
+  await db.collection(USERS_COLLECTION).doc(uid).delete();
+}
+async function loadLetters(){
+  if(!firebaseReady) return [];
+  try{
+    const doc = await db.collection(FIRESTORE_COLLECTION).doc(LETTERS_KEY).get();
+    return doc.exists ? JSON.parse(doc.data().value) : [];
+  }catch(e){ console.error(e); return []; }
+}
+async function saveLetters(list){
+  if(!firebaseReady) throw new Error('NO_STORAGE');
+  await db.collection(FIRESTORE_COLLECTION).doc(LETTERS_KEY).set({ value: JSON.stringify(list) });
+}
+function storageErrorMessage(){
+  if(!firebaseReady){
+    return 'Saving isn\'t active yet. This page needs a Firebase project connected — open <span class="mono">index.html</span>, fill in <span class="mono">firebaseConfig</span> near the top of the script with your own project\'s keys, then reload. See README.md for the step-by-step setup.';
+  }
+  return 'Could not save right now — check your internet connection and Firebase project status, then try again.';
+}
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
+function showToast(msg){
+  const t=document.createElement('div');
+  t.className='toast';t.textContent=msg;
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(),2600);
+}
+
+/* ============================================================
+   APP STATE
+   ============================================================ */
+let currentUser = null;      // {id, name, email, isAdmin, status}
+let allLetters = [];
+let allUsers = [];
+let nav = { source:null, direction:null };   // drill-down state
+let searchMode = 'keyword';
+let adminTab = 'pending';
+
+const SOURCES = [
+  { code:'SITE', label:'Letter from Site', tag:'Site' },
+  { code:'HO',   label:'Letter from HO',   tag:'Head Office' }
+];
+const DIRECTIONS = ['Outward Letter','Inward Letter'];
+function sourceLabel(code){ const s = SOURCES.find(x=>x.code===code); return s ? s.label : code; }
+
+/* ============================================================
+   AUTH SCREEN LOGIC
+   ============================================================ */
+function showScreen(which){
+  document.getElementById('login-panel').classList.toggle('hidden', which!=='login');
+  document.getElementById('register-panel').classList.toggle('hidden', which!=='register');
+  document.getElementById('pending-panel').classList.toggle('hidden', which!=='pending');
+  document.getElementById('login-error').innerHTML='';
+  document.getElementById('register-error').innerHTML='';
+}
+
+async function handleLogin(){
+  const username = document.getElementById('login-user').value.trim().toLowerCase();
+  const pass = document.getElementById('login-pass').value;
+  const errBox = document.getElementById('login-error');
+  errBox.innerHTML='';
+  if(!firebaseReady){ errBox.innerHTML = `<div class="error-msg">${storageErrorMessage()}</div>`; return; }
+  if(!username || !pass){ errBox.innerHTML='<div class="error-msg">Enter username and password.</div>'; return; }
+
+  const users = await loadUsers();
+  const u = users.find(x=>x.email===username);
+  if(!u){ errBox.innerHTML='<div class="error-msg">No account found with that username.</div>'; return; }
+  const ph = await hash(pass);
+  if(ph !== u.passwordHash){ errBox.innerHTML='<div class="error-msg">Incorrect password.</div>'; return; }
+
+  if(u.status !== 'approved'){
+    currentUser = u;
+    document.getElementById('pending-name').textContent = u.name;
+    document.getElementById('pending-username').textContent = u.email;
+    showScreen('pending');
+    return;
+  }
+  await enterApp(u);
+}
+
+async function checkPendingAgain(){
+  const u = await loadUser(currentUser.id);
+  if(u && u.status==='approved'){ await enterApp(u); }
+  else{ showToast('Still pending approval.'); }
+}
+
+async function handleRegister(){
+  const name = document.getElementById('reg-name').value.trim();
+  const email = document.getElementById('reg-user').value.trim().toLowerCase();
+  const pass = document.getElementById('reg-pass').value;
+  const errBox = document.getElementById('register-error');
+  errBox.innerHTML='';
+  if(!firebaseReady){ errBox.innerHTML = `<div class="error-msg">${storageErrorMessage()}</div>`; return; }
+  if(!name || !email || !pass){ errBox.innerHTML='<div class="error-msg">Fill in all fields.</div>'; return; }
+  if(pass.length<4){ errBox.innerHTML='<div class="error-msg">Password should be at least 4 characters.</div>'; return; }
+
+  const existing = await loadUsers();
+  if(existing.some(u=>u.email===email)){ errBox.innerHTML='<div class="error-msg">That username is already taken.</div>'; return; }
+  const isFirstUser = existing.length === 0;
+
+  const newUser = {
+    id: uid(),
+    name, email,
+    passwordHash: await hash(pass),
+    status: isFirstUser ? 'approved' : 'pending',
+    isAdmin: isFirstUser,
+    createdAt: Date.now()
+  };
+  try{
+    await saveUser(newUser.id, newUser);
+  }catch(e){
+    errBox.innerHTML = `<div class="error-msg">${storageErrorMessage()}</div>`;
+    return;
+  }
+
+  if(isFirstUser){
+    showToast('You are the first user — set up as admin.');
+    await enterApp(newUser);
+  }else{
+    currentUser = newUser;
+    document.getElementById('pending-name').textContent = newUser.name;
+    document.getElementById('pending-username').textContent = newUser.email;
+    showScreen('pending');
+  }
+}
+
+async function logout(){
+  currentUser = null;
+  document.getElementById('login-user').value='';
+  document.getElementById('login-pass').value='';
+  document.getElementById('app-screen').classList.add('hidden');
+  document.getElementById('auth-screen').classList.remove('hidden');
+  showScreen('login');
+}
+
+async function enterApp(user){
+  currentUser = user;
+  allUsers = await loadUsers();
+  allLetters = await loadLetters();
+  document.getElementById('auth-screen').classList.add('hidden');
+  document.getElementById('app-screen').classList.remove('hidden');
+  document.getElementById('user-avatar').textContent = (user.name||'?').charAt(0).toUpperCase();
+  document.getElementById('user-name-disp').textContent = user.name;
+  document.getElementById('user-role-disp').textContent = user.isAdmin ? 'Administrator' : 'Portal user';
+  document.getElementById('admin-link-wrap').innerHTML = user.isAdmin
+    ? `<button class="link-btn" style="font-weight:700;color:var(--accent);" onclick="openAdmin()">&#9881; Admin panel</button>`
+    : '';
+  nav = { source:null, direction:null };
+  renderSideNav();
+  renderBrowse();
+}
+
+/* ============================================================
+   SEARCH
+   ============================================================ */
+function setSearchMode(mode){
+  searchMode = mode;
+  document.getElementById('mode-keyword').classList.toggle('active', mode==='keyword');
+  document.getElementById('mode-exact').classList.toggle('active', mode==='exact');
+  document.getElementById('search-input').placeholder = mode==='exact'
+    ? 'Type exact letter number, e.g. SITE-OUT-0042'
+    : 'Search by keyword — e.g. approval, invoice, drawing submission...';
+  onSearchInput();
+}
+function onSearchInput(){
+  const q = document.getElementById('search-input').value.trim();
+  if(!q){ renderBrowse(); return; }
+  renderSearchResults(q);
+}
+function pathLabel(d){
+  return [sourceLabel(d.source), d.direction].join(' \u203a ');
+}
+function renderSearchResults(q){
+  const root = document.getElementById('view-root');
+  let results;
+  if(searchMode==='exact'){
+    results = allLetters.filter(d=> d.number.toLowerCase() === q.toLowerCase());
+  }else{
+    const ql = q.toLowerCase();
+    results = allLetters.filter(d=>
+      d.name.toLowerCase().includes(ql) ||
+      d.number.toLowerCase().includes(ql) ||
+      (d.party||'').toLowerCase().includes(ql) ||
+      (d.keywords||'').toLowerCase().includes(ql)
+    );
+  }
+  document.getElementById('side-nav').querySelectorAll('.crumb-item').forEach(el=>el.classList.remove('active'));
+
+  let html = `<div class="breadcrumb"><span class="seg" onclick="clearSearch()">All letters</span><span class="sep">/</span><span class="current">Search: "${escapeHtml(q)}" (${results.length})</span></div>`;
+  if(results.length===0){
+    html += `<div class="empty-state"><h3>No matching letters</h3><p>${searchMode==='exact' ? 'No letter has that exact number.' : 'Try a different keyword, or check the number is correct.'}</p></div>`;
+  }else{
+    html += `<div class="drg-list">` + results.map(drgCard).join('') + `</div>`;
+  }
+  root.innerHTML = html;
+}
+function clearSearch(){
+  document.getElementById('search-input').value='';
+  renderBrowse();
+}
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function escapeAttr(s){ return (s||'').replace(/"/g,'&quot;'); }
+
+/* ============================================================
+   SIDE NAV (drill-down tree shortcuts)
+   ============================================================ */
+function countOf(source, direction){
+  return allLetters.filter(d=> (!source || d.source===source) && (!direction || d.direction===direction)).length;
+}
+function renderSideNav(){
+  let html = `<div class="tree-group">
+    <div class="crumb-item ${!nav.source?'active':''}" onclick="goNav({})"><span>All letters</span><span class="arrow">${allLetters.length}</span></div>
+  </div>`;
+  SOURCES.forEach(s=>{
+    html += `<div class="tree-group"><div class="tree-label">${escapeHtml(s.label)}</div>`;
+    html += `<div class="crumb-item ${nav.source===s.code&&!nav.direction?'active':''}" onclick="goNav({source:'${s.code}'})"><span>All</span><span class="arrow">${countOf(s.code)}</span></div>`;
+    DIRECTIONS.forEach(dir=>{
+      html += `<div class="crumb-item ${nav.source===s.code&&nav.direction===dir?'active':''}" onclick="goNav({source:'${s.code}',direction:'${dir}'})"><span>${escapeHtml(dir)}</span><span class="arrow">${countOf(s.code,dir)}</span></div>`;
+    });
+    html += `</div>`;
+  });
+  document.getElementById('side-nav').innerHTML = html;
+}
+function goNav(partial){
+  nav = { source: partial.source||null, direction: partial.direction||null };
+  document.getElementById('search-input').value='';
+  renderSideNav();
+  renderBrowse();
+}
+
+/* ============================================================
+   BROWSE VIEW (drill-down: source -> direction -> list)
+   ============================================================ */
+function renderBrowse(){
+  const root = document.getElementById('view-root');
+
+  let crumbs = [`<span class="seg" onclick="goNav({})">All letters</span>`];
+  if(nav.source) crumbs.push(`<span class="sep">/</span><span class="seg" onclick="goNav({source:'${nav.source}'})">${escapeHtml(sourceLabel(nav.source))}</span>`);
+  if(nav.direction) crumbs.push(`<span class="sep">/</span><span class="current">${escapeHtml(nav.direction)}</span>`);
+  let html = `<div class="breadcrumb">${crumbs.join('')}</div>`;
+
+  // Step 0: choose Site / HO
+  if(!nav.source){
+    html += `<div class="pick-grid">` + SOURCES.map(s=>{
+      const c = countOf(s.code);
+      return `<div class="pick-card" onclick="goNav({source:'${s.code}'})"><div class="tag">${escapeHtml(s.tag)}</div><h3>${escapeHtml(s.label)}</h3><div class="count">${c} letter${c!==1?'s':''}</div></div>`;
+    }).join('') + `</div>`;
+    root.innerHTML = html;
+    return;
+  }
+
+  // Step 1: choose Outward / Inward
+  if(!nav.direction){
+    html += `<div class="pick-grid">` + DIRECTIONS.map(dir=>{
+      const c = countOf(nav.source, dir);
+      return `<div class="pick-card" onclick="goNav({source:'${nav.source}',direction:'${dir}'})"><div class="tag">${dir.indexOf('Outward')===0?'Sent':'Received'}</div><h3>${escapeHtml(dir)}</h3><div class="count">${c} letter${c!==1?'s':''}</div></div>`;
+    }).join('') + `</div>`;
+    root.innerHTML = html;
+    return;
+  }
+
+  // Step 2: the list
+  const list = allLetters
+    .filter(d=> d.source===nav.source && d.direction===nav.direction)
+    .sort((a,b)=> (b.letterDate||'').localeCompare(a.letterDate||''));
+  if(list.length===0){
+    html += `<div class="empty-state"><h3>No letters here yet</h3><p>Ask your admin to add letters for this folder from the Admin panel.</p></div>`;
+  }else{
+    html += `<div class="drg-list">` + list.map(drgCard).join('') + `</div>`;
+  }
+  root.innerHTML = html;
+}
+
+function drgCard(d){
+  const badgeClass = (d.direction||'').indexOf('Outward')===0 ? 'badge-out' : 'badge-in';
+  const shortDir = (d.direction||'').indexOf('Outward')===0 ? 'Outward' : 'Inward';
+  return `<div class="drg-card">
+    <div class="drg-info">
+      <div class="name">${escapeHtml(d.name)}</div>
+      <div class="meta">
+        <span class="num">${escapeHtml(d.number)}</span>
+        <span class="badge ${badgeClass}">${shortDir}</span>
+        <span>${escapeHtml(sourceLabel(d.source))}</span>
+        ${d.letterDate ? `<span class="mono" style="color:#6a7180;">${escapeHtml(d.letterDate)}</span>` : ''}
+        ${d.party ? `<span>${escapeHtml(d.party)}</span>` : ''}
+      </div>
+    </div>
+    <div class="drg-actions">
+      <a class="icon-btn" href="${escapeAttr(d.link)}" target="_blank" rel="noopener">View / Download &#8599;</a>
+    </div>
+  </div>`;
+}
+
+/* =====================================================
+   BULK DELETE + DATE FILTER STATE (Admin -> Manage letters)
+===================================================== */
+let selectedLetterIds = new Set();
+let manageFromDate = '';
+let manageToDate = '';
+
+function getManageFilteredLetters(){
+  if(!manageFromDate && !manageToDate) return allLetters;
+  return allLetters.filter(d=>{
+    const ts = d.uploadedAt || 0;
+    if(manageFromDate){
+      const fromTs = new Date(manageFromDate + 'T00:00:00').getTime();
+      if(ts < fromTs) return false;
+    }
+    if(manageToDate){
+      const toTs = new Date(manageToDate + 'T23:59:59').getTime();
+      if(ts > toTs) return false;
+    }
+    return true;
+  });
+}
+function applyManageDateFilter(){
+  manageFromDate = document.getElementById('f-date-from').value;
+  manageToDate = document.getElementById('f-date-to').value;
+  const filteredIds = new Set(getManageFilteredLetters().map(d=>d.id));
+  selectedLetterIds = new Set([...selectedLetterIds].filter(id=>filteredIds.has(id)));
+  renderAdmin();
+}
+function resetManageDateFilter(){
+  manageFromDate = '';
+  manageToDate = '';
+  renderAdmin();
+}
+function toggleSelectLetter(id, checked){
+  if(checked) selectedLetterIds.add(id); else selectedLetterIds.delete(id);
+  renderAdmin();
+}
+function toggleSelectAllManage(checked){
+  const filtered = getManageFilteredLetters();
+  if(checked){ filtered.forEach(d=>selectedLetterIds.add(d.id)); }
+  else{ filtered.forEach(d=>selectedLetterIds.delete(d.id)); }
+  renderAdmin();
+}
+function clearSelectionManage(){
+  selectedLetterIds.clear();
+  renderAdmin();
+}
+async function deleteSelectedManage(){
+  const statusBox = document.getElementById('manage-status');
+  const filtered = getManageFilteredLetters();
+  const filteredIds = new Set(filtered.map(d=>d.id));
+  const idsToDelete = [...selectedLetterIds].filter(id=>filteredIds.has(id));
+
+  if(idsToDelete.length===0){
+    if(statusBox) statusBox.textContent = 'Please select at least one letter.';
+    return;
+  }
+  if(!confirm(`Delete ${idsToDelete.length} selected letters?`)) return;
+  if(statusBox) statusBox.innerHTML = `Deleting ${idsToDelete.length} letters...<br>Please wait...`;
+
+  const prev = allLetters;
+  const deleteSet = new Set(idsToDelete);
+  allLetters = allLetters.filter(d=>!deleteSet.has(d.id));
+
+  try{ await saveLetters(allLetters); }
+  catch(e){
+    allLetters = prev;
+    if(statusBox) statusBox.innerHTML = storageErrorMessage();
+    return;
+  }
+
+  idsToDelete.forEach(id=>selectedLetterIds.delete(id));
+  showToast(`Successfully deleted ${idsToDelete.length} letters.`);
+  renderSideNav();
+  renderAdmin();
+}
+
+/* ============================================================
+   ADMIN PANEL
+   ============================================================ */
+function openAdmin(){
+  adminTab='pending';
+  renderAdmin();
+}
+function backToBrowse(){
+  renderSideNav();
+  renderBrowse();
+}
+function setAdminTab(t){ adminTab=t; renderAdmin(); }
+
+function renderAdmin(){
+  const root = document.getElementById('view-root');
+  let html = `<div class="breadcrumb"><span class="seg" onclick="backToBrowse()">All letters</span><span class="sep">/</span><span class="current">Admin panel</span></div>`;
+  html += `<div class="admin-tabs">
+    <button class="admin-tab ${adminTab==='pending'?'active':''}" onclick="setAdminTab('pending')">Pending approvals</button>
+    <button class="admin-tab ${adminTab==='users'?'active':''}" onclick="setAdminTab('users')">All users</button>
+    <button class="admin-tab ${adminTab==='add'?'active':''}" onclick="setAdminTab('add')">Add letter</button>
+    <button class="admin-tab ${adminTab==='bulk'?'active':''}" onclick="setAdminTab('bulk')">Bulk import</button>
+    <button class="admin-tab ${adminTab==='manage'?'active':''}" onclick="setAdminTab('manage')">Manage letters</button>
+  </div>`;
+
+  if(adminTab==='pending'){
+    const pending = allUsers.filter(u=>u.status==='pending');
+    if(pending.length===0){ html += `<div class="empty-state"><h3>No pending requests</h3><p>New sign-ups will show up here.</p></div>`; }
+    else pending.forEach(u=>{
+      html += `<div class="admin-card"><div class="admin-row">
+        <div><div class="who">${escapeHtml(u.name)} <span class="mono" style="color:var(--line);font-size:12px;">${escapeHtml(u.email)}</span></div>
+        <div class="when">Requested ${new Date(u.createdAt||Date.now()).toLocaleString()}</div></div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm btn-success" onclick="approveUser('${u.id}')">Approve</button>
+          <button class="btn btn-sm btn-danger" onclick="rejectUser('${u.id}')">Reject</button>
+        </div></div></div>`;
+    });
+  }
+
+  if(adminTab==='users'){
+    allUsers.forEach(u=>{
+      const pill = u.isAdmin ? '<span class="pill pill-admin">Admin</span>' : (u.status==='approved' ? '<span class="pill pill-approved">Approved</span>' : '<span class="pill pill-pending">Pending</span>');
+      html += `<div class="admin-card"><div class="admin-row">
+        <div><div class="who">${escapeHtml(u.name)} <span class="mono" style="color:var(--line);font-size:12px;">${escapeHtml(u.email)}</span> ${pill}</div></div>
+        <div style="display:flex;gap:8px;">
+          ${!u.isAdmin ? `<button class="btn btn-sm btn-danger" onclick="removeUser('${u.id}')">Remove access</button>` : `<span class="when">Cannot remove admin</span>`}
+        </div></div></div>`;
+    });
+    html += `<div class="help-text">Removing access blocks the account here. To delete the login itself, remove the user in Firebase Console &rarr; Authentication &rarr; Users.</div>`;
+  }
+
+  if(adminTab==='add'){
+    html += `<div class="admin-card">
+      <div class="form-grid">
+        <div><label>Subject / description</label><input id="f-name" placeholder="e.g. Submission of revised BOQ"></div>
+        <div><label>Letter number</label><input id="f-number" class="mono" placeholder="e.g. SITE-OUT-0042"></div>
+        <div><label>Folder</label><select id="f-source">${SOURCES.map(s=>`<option value="${s.code}">${escapeHtml(s.label)}</option>`).join('')}</select></div>
+        <div><label>Type</label><select id="f-direction">${DIRECTIONS.map(d=>`<option value="${escapeAttr(d)}">${escapeHtml(d)}</option>`).join('')}</select></div>
+        <div><label>Letter date</label><input type="date" id="f-date"></div>
+        <div><label>From / To party</label><input id="f-party" placeholder="e.g. MSETCL, Nashik"></div>
+        <div class="full"><label>Keywords (optional)</label><input id="f-keywords" placeholder="e.g. BOQ, revision, approval"></div>
+        <div class="full"><label>OneDrive link (share link, "anyone with link can view")</label><input id="f-link" placeholder="https://1drv.ms/..."></div>
+      </div>
+      <div class="help-text">Make sure the OneDrive sharing permission is set to "Anyone with the link" so staff without a Microsoft login can open it.</div>
+      <div style="margin-top:16px;"><button class="btn btn-primary" style="width:auto;" onclick="addLetter()">Add letter</button></div>
+    </div>`;
+  }
+
+  if(adminTab==='bulk'){
+    html += `<div class="admin-card">
+      <div class="hint" style="color:var(--paper);font-size:13px;margin-bottom:12px;">
+        Paste straight from your Excel, <b>including the header row</b>. Column names are matched automatically (any order): <span class="mono">Subject, Letter No, Folder, Type, Date, Party, Keywords, OneDrive Link</span>.<br><br>
+        <b>Folder</b> accepts <span class="mono">Site</span> or <span class="mono">HO</span> (blank = Site). <b>Type</b> accepts <span class="mono">Outward</span> or <span class="mono">Inward</span> (blank = Outward).<br>
+        Re-pasting a Letter No that already exists <b>updates</b> that letter instead of duplicating it — so you can just re-paste your whole sheet whenever it changes.
+      </div>
+      <textarea id="bulk-text" placeholder="Subject&#9;Letter No&#9;Folder&#9;Type&#9;Date&#9;Party&#9;Keywords&#9;OneDrive Link
+Revised BOQ submission&#9;SITE-OUT-0042&#9;Site&#9;Outward&#9;2026-04-12&#9;MSETCL&#9;BOQ&#9;https://..."></textarea>
+      <div style="margin-top:12px;"><button class="btn btn-primary" style="width:auto;" onclick="bulkImport()">Import rows</button></div>
+      <div id="bulk-result" class="help-text"></div>
+    </div>`;
+  }
+
+  if(adminTab==='manage'){
+    const manageFiltered = getManageFilteredLetters();
+    const manageSelectedCount = manageFiltered.filter(d=>selectedLetterIds.has(d.id)).length;
+    const allFilteredSelected = manageFiltered.length>0 && manageFiltered.every(d=>selectedLetterIds.has(d.id));
+
+    html += `<div class="admin-card">
+      <div class="form-grid">
+        <div><label>From date</label><input type="date" id="f-date-from" value="${escapeAttr(manageFromDate)}"></div>
+        <div><label>To date</label><input type="date" id="f-date-to" value="${escapeAttr(manageToDate)}"></div>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-sm btn-primary" style="width:auto;" onclick="applyManageDateFilter()">Apply Filter</button>
+        <button class="btn btn-sm btn-ghost" style="width:auto;" onclick="resetManageDateFilter()">Reset</button>
+      </div>
+    </div>
+
+    <div class="admin-card">
+      <div class="admin-row" style="flex-wrap:wrap;gap:14px;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" id="select-all-cb" ${allFilteredSelected?'checked':''} onchange="toggleSelectAllManage(this.checked)">
+          Select All
+        </label>
+        <button class="btn btn-sm btn-ghost" style="width:auto;" onclick="clearSelectionManage()">Clear Selection</button>
+        <button class="btn btn-sm btn-danger" style="width:auto;" onclick="deleteSelectedManage()">Delete Selected</button>
+        <span class="mono" style="font-size:12.5px;color:var(--line);">Selected: ${manageSelectedCount}</span>
+      </div>
+      <div id="manage-status" class="help-text"></div>
+    </div>`;
+
+    if(manageFiltered.length===0){ html += `<div class="empty-state"><h3>No letters ${(manageFromDate||manageToDate)?'in this date range':'yet'}</h3><p>${(manageFromDate||manageToDate)?'Try resetting the date filter.':'Add letters via "Add letter" or "Bulk import".'}</p></div>`; }
+    else{
+      html += `<div class="drg-list">` + manageFiltered.map(d=>`
+        <div class="drg-card">
+          <input type="checkbox" ${selectedLetterIds.has(d.id)?'checked':''} onchange="toggleSelectLetter('${d.id}', this.checked)" style="width:17px;height:17px;flex-shrink:0;cursor:pointer;">
+          <div class="drg-info">
+            <div class="name">${escapeHtml(d.name)}</div>
+            <div class="meta"><span class="num">${escapeHtml(d.number)}</span><span class="badge ${(d.direction||'').indexOf('Outward')===0?'badge-out':'badge-in'}">${(d.direction||'').indexOf('Outward')===0?'Outward':'Inward'}</span><span>${escapeHtml(pathLabel(d))}</span>${d.letterDate?`<span class="mono" style="color:#6a7180;">${escapeHtml(d.letterDate)}</span>`:''}</div>
+          </div>
+          <div class="drg-actions">
+            <button class="icon-btn" onclick="deleteLetter('${d.id}')">Delete</button>
+          </div>
+        </div>`).join('') + `</div>`;
+    }
+  }
+
+  root.innerHTML = html;
+}
+
+async function addLetter(){
+  const name = document.getElementById('f-name').value.trim();
+  const number = document.getElementById('f-number').value.trim();
+  const source = document.getElementById('f-source').value;
+  const direction = document.getElementById('f-direction').value;
+  const letterDate = document.getElementById('f-date').value;
+  const party = document.getElementById('f-party').value.trim();
+  const link = document.getElementById('f-link').value.trim();
+  const keywords = document.getElementById('f-keywords').value.trim();
+  if(!name || !number || !link){ showToast('Fill in subject, number and link.'); return; }
+  allLetters.push({ id:uid(), name, number, source, direction, letterDate, party, keywords, link, uploadedAt:Date.now() });
+  try{ await saveLetters(allLetters); }
+  catch(e){ allLetters.pop(); showToast('Could not save — check your Firebase setup.'); return; }
+  showToast('Letter added.');
+  renderSideNav();
+  renderAdmin();
+}
+
+const HEADER_MAP = {
+  name: ['subject','description','name','letter name','title','particulars'],
+  number: ['letter no','letter number','ltr no','no','number','ref no','reference no'],
+  source: ['folder','from','source','office','category'],
+  direction: ['type','direction','inward/outward','in/out'],
+  letterDate: ['date','letter date','dated'],
+  party: ['party','from / to','to','from party','addressee'],
+  keywords: ['keywords','keyword','tags'],
+  link: ['onedrive link','link','pdf link','letter link','url']
+};
+function matchHeader(col){
+  const c = col.trim().toLowerCase();
+  for(const [field, aliases] of Object.entries(HEADER_MAP)){
+    if(aliases.includes(c)) return field;
+  }
+  return null;
+}
+function splitRow(line){
+  const delim = line.includes('\t') ? '\t' : ',';
+  return line.split(delim).map(c=>c.trim().replace(/^"|"$/g,''));
+}
+function normSource(v){
+  const s = (v||'').trim().toLowerCase();
+  if(!s) return 'SITE';
+  if(s==='ho' || s.indexOf('head')===0 || s.indexOf('h.o')===0 || s.indexOf('office')>-1) return 'HO';
+  return 'SITE';
+}
+function normDirection(v){
+  const s = (v||'').trim().toLowerCase();
+  return s.indexOf('in')===0 ? 'Inward Letter' : 'Outward Letter';
+}
+
+async function bulkImport(){
+  const raw = document.getElementById('bulk-text').value.trim();
+  const resultBox = document.getElementById('bulk-result');
+  if(!raw){ resultBox.textContent='Paste some rows first.'; return; }
+  const lines = raw.split('\n').map(l=>l.trim()).filter(Boolean);
+  if(lines.length<2){ resultBox.textContent='Paste a header row plus at least one data row.'; return; }
+
+  const headerCols = splitRow(lines[0]);
+  const fieldForCol = headerCols.map(matchHeader);
+  if(!fieldForCol.includes('name') || !fieldForCol.includes('number') || !fieldForCol.includes('link')){
+    resultBox.innerHTML = 'Could not find <b>Subject/Description</b>, <b>Letter No</b> and <b>OneDrive Link</b> columns in the first row — make sure you pasted the header row from your sheet.';
+    return;
+  }
+
+  let added=0, updated=0, skipped=0;
+  for(const line of lines.slice(1)){
+    const cols = splitRow(line);
+    const row = {};
+    fieldForCol.forEach((field,i)=>{ if(field) row[field] = (cols[i]||'').trim(); });
+    if(!row.name || !row.number || !row.link){ skipped++; continue; }
+
+    const record = {
+      name: row.name,
+      number: row.number,
+      source: normSource(row.source),
+      direction: normDirection(row.direction),
+      letterDate: row.letterDate || '',
+      party: row.party || '',
+      keywords: row.keywords || '',
+      link: row.link,
+      uploadedAt: Date.now()
+    };
+
+    const existingIdx = allLetters.findIndex(d=>d.number.toLowerCase()===row.number.toLowerCase());
+    if(existingIdx>-1){
+      allLetters[existingIdx] = { ...allLetters[existingIdx], ...record };
+      updated++;
+    }else{
+      allLetters.push({ id:uid(), ...record });
+      added++;
+    }
+  }
+
+  try{ await saveLetters(allLetters); }
+  catch(e){ resultBox.innerHTML = storageErrorMessage(); return; }
+  resultBox.textContent = `Added ${added}, updated ${updated}.${skipped?` Skipped ${skipped} row(s) — missing subject, number or link.`:''}`;
+  document.getElementById('bulk-text').value='';
+  renderSideNav();
+}
+
+async function deleteLetter(id){
+  if(!confirm('Remove this letter from the register?')) return;
+  const prev = allLetters;
+  allLetters = allLetters.filter(d=>d.id!==id);
+  try{ await saveLetters(allLetters); }
+  catch(e){ allLetters = prev; showToast('Could not save — check your Firebase setup.'); return; }
+  selectedLetterIds.delete(id);
+  showToast('Letter removed.');
+  renderSideNav();
+  renderAdmin();
+}
+
+async function approveUser(id){
+  try{ await saveUser(id, { status:'approved' }); }
+  catch(e){ showToast('Could not save — check your Firebase setup.'); return; }
+  allUsers = allUsers.map(u=> u.id===id ? {...u, status:'approved'} : u);
+  showToast('User approved.');
+  renderAdmin();
+}
+async function rejectUser(id){
+  try{ await saveUser(id, { status:'rejected' }); }
+  catch(e){ showToast('Could not save — check your Firebase setup.'); return; }
+  allUsers = allUsers.map(u=> u.id===id ? {...u, status:'rejected'} : u);
+  showToast('Request rejected.');
+  renderAdmin();
+}
+async function removeUser(id){
+  if(!confirm('Remove this user\'s access?')) return;
+  try{ await deleteUserDoc(id); }
+  catch(e){ showToast('Could not save — check your Firebase setup.'); return; }
+  allUsers = allUsers.filter(u=>u.id!==id);
+  showToast('Access removed.');
+  renderAdmin();
+}
+
+/* ============================================================
+   INIT
+   Note: unlike before, there's no Firebase Auth session to restore, so
+   sign-in is required again on every page reload (same as the Drawing portal).
+   ============================================================ */
+if(!firebaseReady){
+  document.getElementById('login-error').innerHTML = `<div class="error-msg">${storageErrorMessage()}</div>`;
+}
+showScreen('login');
+</script>
+</body>
+</html>
