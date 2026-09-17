@@ -299,7 +299,7 @@ button{font-family:inherit;cursor:pointer;}
         </div>
         <div class="mode-toggle">
           <button id="mode-keyword" class="active" onclick="setSearchMode('keyword')">Keyword</button>
-          <button id="mode-exact" onclick="setSearchMode('exact')">Exact Letter No.</button>
+          <button id="mode-exact" onclick="setSearchMode('exact')">Exact Sr. No.</button>
         </div>
       </div>
 
@@ -410,6 +410,12 @@ const SOURCES = [
   { code:'HO',   label:'Letter from HO',   tag:'Head Office' }
 ];
 const DIRECTIONS = ['Outward Letter','Inward Letter'];
+const TYPE_OPTIONS = [
+  { value:'SITE|Outward Letter', label:'Site - Outward' },
+  { value:'SITE|Inward Letter',  label:'Site - Inward'  },
+  { value:'HO|Outward Letter',   label:'HO - Outward'   },
+  { value:'HO|Inward Letter',    label:'HO - Inward'    }
+];
 function sourceLabel(code){ const s = SOURCES.find(x=>x.code===code); return s ? s.label : code; }
 
 /* ============================================================
@@ -527,7 +533,7 @@ function setSearchMode(mode){
   document.getElementById('mode-keyword').classList.toggle('active', mode==='keyword');
   document.getElementById('mode-exact').classList.toggle('active', mode==='exact');
   document.getElementById('search-input').placeholder = mode==='exact'
-    ? 'Type exact letter number, e.g. SITE-OUT-0042'
+    ? 'Type exact Sr. No., e.g. 1'
     : 'Search by keyword — e.g. approval, invoice, drawing submission...';
   onSearchInput();
 }
@@ -792,15 +798,14 @@ function renderAdmin(){
     html += `<div class="admin-card">
       <div class="form-grid">
         <div><label>Subject / description</label><input id="f-name" placeholder="e.g. Submission of revised BOQ"></div>
-        <div><label>Letter number</label><input id="f-number" class="mono" placeholder="e.g. SITE-OUT-0042"></div>
-        <div><label>Folder</label><select id="f-source">${SOURCES.map(s=>`<option value="${s.code}">${escapeHtml(s.label)}</option>`).join('')}</select></div>
-        <div><label>Type</label><select id="f-direction">${DIRECTIONS.map(d=>`<option value="${escapeAttr(d)}">${escapeHtml(d)}</option>`).join('')}</select></div>
+        <div><label>Sr. No.</label><input id="f-number" class="mono" placeholder="e.g. 1"></div>
+        <div><label>Type</label><select id="f-type">${TYPE_OPTIONS.map(o=>`<option value="${o.value}">${escapeHtml(o.label)}</option>`).join('')}</select></div>
         <div><label>Letter date</label><input type="date" id="f-date"></div>
-        <div><label>From / To party</label><input id="f-party" placeholder="e.g. MSETCL, Nashik"></div>
+        <div><label>To or From</label><input id="f-party" placeholder="e.g. MSETCL, Nashik"></div>
         <div class="full"><label>Keywords (optional)</label><input id="f-keywords" placeholder="e.g. BOQ, revision, approval"></div>
-        <div class="full"><label>OneDrive link (share link, "anyone with link can view")</label><input id="f-link" placeholder="https://1drv.ms/..."></div>
+        <div class="full"><label>Pdf Access (share link, "anyone with link can view")</label><input id="f-link" placeholder="https://..."></div>
       </div>
-      <div class="help-text">Make sure the OneDrive sharing permission is set to "Anyone with the link" so staff without a Microsoft login can open it.</div>
+      <div class="help-text">Make sure the sharing permission is set to "Anyone with the link" so staff without a login on that service can open it.</div>
       <div style="margin-top:16px;"><button class="btn btn-primary" style="width:auto;" onclick="addLetter()">Add letter</button></div>
     </div>`;
   }
@@ -808,12 +813,12 @@ function renderAdmin(){
   if(adminTab==='bulk'){
     html += `<div class="admin-card">
       <div class="hint" style="color:var(--paper);font-size:13px;margin-bottom:12px;">
-        Paste straight from your Excel, <b>including the header row</b>. Column names are matched automatically (any order): <span class="mono">Subject, Letter No, Folder, Type, Date, Party, Keywords, OneDrive Link</span>.<br><br>
-        <b>Folder</b> accepts <span class="mono">Site</span> or <span class="mono">HO</span> (blank = Site). <b>Type</b> accepts <span class="mono">Outward</span> or <span class="mono">Inward</span> (blank = Outward).<br>
-        Re-pasting a Letter No that already exists <b>updates</b> that letter instead of duplicating it — so you can just re-paste your whole sheet whenever it changes.
+        Paste straight from your Excel, <b>including the header row</b>. Column names are matched automatically (any order): <span class="mono">Sr. No., Date, Subject, To or From, Type, Pdf Access, Keywords</span>.<br><br>
+        <b>Type</b> accepts <span class="mono">Site - Outward</span>, <span class="mono">Site - Inward</span>, <span class="mono">HO - Outward</span> or <span class="mono">HO - Inward</span> (blank = Site - Outward).<br>
+        Re-pasting a Sr. No. that already exists <b>updates</b> that letter instead of duplicating it — so you can just re-paste your whole sheet whenever it changes.
       </div>
-      <textarea id="bulk-text" placeholder="Subject&#9;Letter No&#9;Folder&#9;Type&#9;Date&#9;Party&#9;Keywords&#9;OneDrive Link
-Revised BOQ submission&#9;SITE-OUT-0042&#9;Site&#9;Outward&#9;2026-04-12&#9;MSETCL&#9;BOQ&#9;https://..."></textarea>
+      <textarea id="bulk-text" placeholder="Sr. No.&#9;Date&#9;Subject&#9;To or From&#9;Type&#9;Pdf Access&#9;Keywords
+1&#9;2026-04-12&#9;Revised BOQ submission&#9;MSETCL&#9;Site - Outward&#9;https://...&#9;BOQ"></textarea>
       <div style="margin-top:12px;"><button class="btn btn-primary" style="width:auto;" onclick="bulkImport()">Import rows</button></div>
       <div id="bulk-result" class="help-text"></div>
     </div>`;
@@ -870,13 +875,12 @@ Revised BOQ submission&#9;SITE-OUT-0042&#9;Site&#9;Outward&#9;2026-04-12&#9;MSET
 async function addLetter(){
   const name = document.getElementById('f-name').value.trim();
   const number = document.getElementById('f-number').value.trim();
-  const source = document.getElementById('f-source').value;
-  const direction = document.getElementById('f-direction').value;
+  const [source, direction] = document.getElementById('f-type').value.split('|');
   const letterDate = document.getElementById('f-date').value;
   const party = document.getElementById('f-party').value.trim();
   const link = document.getElementById('f-link').value.trim();
   const keywords = document.getElementById('f-keywords').value.trim();
-  if(!name || !number || !link){ showToast('Fill in subject, number and link.'); return; }
+  if(!name || !number || !link){ showToast('Fill in subject, Sr. No. and Pdf Access link.'); return; }
   allLetters.push({ id:uid(), name, number, source, direction, letterDate, party, keywords, link, uploadedAt:Date.now() });
   try{ await saveLetters(allLetters); }
   catch(e){ allLetters.pop(); showToast('Could not save — check your Firebase setup.'); return; }
@@ -887,13 +891,14 @@ async function addLetter(){
 
 const HEADER_MAP = {
   name: ['subject','description','name','letter name','title','particulars'],
-  number: ['letter no','letter number','ltr no','no','number','ref no','reference no'],
+  number: ['sr no','sr. no','sr.no','srno','serial no','serial number','sr','letter no','letter number','ltr no','no','number','ref no','reference no'],
+  combinedType: ['type'],
   source: ['folder','from','source','office','category'],
-  direction: ['type','direction','inward/outward','in/out'],
+  direction: ['direction','inward/outward','in/out'],
   letterDate: ['date','letter date','dated'],
-  party: ['party','from / to','to','from party','addressee'],
+  party: ['to or from','to/from','party','from / to','to','from party','addressee'],
   keywords: ['keywords','keyword','tags'],
-  link: ['onedrive link','link','pdf link','letter link','url']
+  link: ['pdf access','pdfaccess','pdf link','onedrive link','link','letter link','url','access']
 };
 function matchHeader(col){
   const c = col.trim().toLowerCase();
@@ -916,6 +921,12 @@ function normDirection(v){
   const s = (v||'').trim().toLowerCase();
   return s.indexOf('in')===0 ? 'Inward Letter' : 'Outward Letter';
 }
+function parseCombinedType(v){
+  const s = (v||'').trim().toLowerCase();
+  const source = /\bho\b|head\s*office/.test(s) ? 'HO' : 'SITE';
+  const direction = /inward/.test(s) ? 'Inward Letter' : 'Outward Letter';
+  return { source, direction };
+}
 
 async function bulkImport(){
   const raw = document.getElementById('bulk-text').value.trim();
@@ -927,7 +938,7 @@ async function bulkImport(){
   const headerCols = splitRow(lines[0]);
   const fieldForCol = headerCols.map(matchHeader);
   if(!fieldForCol.includes('name') || !fieldForCol.includes('number') || !fieldForCol.includes('link')){
-    resultBox.innerHTML = 'Could not find <b>Subject/Description</b>, <b>Letter No</b> and <b>OneDrive Link</b> columns in the first row — make sure you pasted the header row from your sheet.';
+    resultBox.innerHTML = 'Could not find <b>Subject</b>, <b>Sr. No.</b> and <b>Pdf Access</b> columns in the first row — make sure you pasted the header row from your sheet.';
     return;
   }
 
@@ -938,11 +949,19 @@ async function bulkImport(){
     fieldForCol.forEach((field,i)=>{ if(field) row[field] = (cols[i]||'').trim(); });
     if(!row.name || !row.number || !row.link){ skipped++; continue; }
 
+    let source, direction;
+    if(row.combinedType){
+      const t = parseCombinedType(row.combinedType);
+      source = t.source; direction = t.direction;
+    }else{
+      source = normSource(row.source);
+      direction = normDirection(row.direction);
+    }
     const record = {
       name: row.name,
       number: row.number,
-      source: normSource(row.source),
-      direction: normDirection(row.direction),
+      source,
+      direction,
       letterDate: row.letterDate || '',
       party: row.party || '',
       keywords: row.keywords || '',
@@ -962,7 +981,7 @@ async function bulkImport(){
 
   try{ await saveLetters(allLetters); }
   catch(e){ resultBox.innerHTML = storageErrorMessage(); return; }
-  resultBox.textContent = `Added ${added}, updated ${updated}.${skipped?` Skipped ${skipped} row(s) — missing subject, number or link.`:''}`;
+  resultBox.textContent = `Added ${added}, updated ${updated}.${skipped?` Skipped ${skipped} row(s) — missing subject, Sr. No. or Pdf Access link.`:''}`;
   document.getElementById('bulk-text').value='';
   renderSideNav();
 }
