@@ -545,6 +545,13 @@ function onSearchInput(){
 function pathLabel(d){
   return [sourceLabel(d.source), d.direction].join(' \u203a ');
 }
+function byNumber(a,b){
+  const na = parseFloat(a.number), nb = parseFloat(b.number);
+  const aIsNum = !isNaN(na) && /^\s*-?\d+(\.\d+)?\s*$/.test(a.number||'');
+  const bIsNum = !isNaN(nb) && /^\s*-?\d+(\.\d+)?\s*$/.test(b.number||'');
+  if(aIsNum && bIsNum) return na - nb;
+  return (a.number||'').localeCompare(b.number||'', undefined, {numeric:true, sensitivity:'base'});
+}
 function renderSearchResults(q){
   const root = document.getElementById('view-root');
   let results;
@@ -559,6 +566,7 @@ function renderSearchResults(q){
       (d.keywords||'').toLowerCase().includes(ql)
     );
   }
+  results = results.sort(byNumber);
   document.getElementById('side-nav').querySelectorAll('.crumb-item').forEach(el=>el.classList.remove('active'));
 
   let html = `<div class="breadcrumb"><span class="seg" onclick="clearSearch()">All letters</span><span class="sep">/</span><span class="current">Search: "${escapeHtml(q)}" (${results.length})</span></div>`;
@@ -637,7 +645,7 @@ function renderBrowse(){
   // Step 2: the list
   const list = allLetters
     .filter(d=> d.source===nav.source && d.direction===nav.direction)
-    .sort((a,b)=> (b.letterDate||'').localeCompare(a.letterDate||''));
+    .sort(byNumber);
   if(list.length===0){
     html += `<div class="empty-state"><h3>No letters here yet</h3><p>Ask your admin to add letters for this folder from the Admin panel.</p></div>`;
   }else{
@@ -674,7 +682,7 @@ let manageFromDate = '';
 let manageToDate = '';
 
 function getManageFilteredLetters(){
-  if(!manageFromDate && !manageToDate) return allLetters;
+  if(!manageFromDate && !manageToDate) return allLetters.slice().sort(byNumber);
   return allLetters.filter(d=>{
     const ts = d.uploadedAt || 0;
     if(manageFromDate){
@@ -686,7 +694,7 @@ function getManageFilteredLetters(){
       if(ts > toTs) return false;
     }
     return true;
-  });
+  }).sort(byNumber);
 }
 function applyManageDateFilter(){
   manageFromDate = document.getElementById('f-date-from').value;
@@ -976,7 +984,11 @@ async function bulkImport(){
       uploadedAt: Date.now()
     };
 
-    const existingIdx = allLetters.findIndex(d=>d.number.toLowerCase()===row.number.toLowerCase());
+    const existingIdx = allLetters.findIndex(d=>
+      d.number.toLowerCase()===row.number.toLowerCase() &&
+      d.source===record.source &&
+      d.direction===record.direction
+    );
     if(existingIdx>-1){
       allLetters[existingIdx] = { ...allLetters[existingIdx], ...record };
       updated++;
