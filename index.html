@@ -901,14 +901,17 @@ const HEADER_MAP = {
   link: ['pdf access','pdfaccess','pdf link','onedrive link','link','letter link','url','access']
 };
 function matchHeader(col){
-  const c = col.trim().toLowerCase();
+  const c = col.trim().toLowerCase().replace(/\.+$/,'');
   for(const [field, aliases] of Object.entries(HEADER_MAP)){
     if(aliases.includes(c)) return field;
   }
   return null;
 }
 function splitRow(line){
-  const delim = line.includes('\t') ? '\t' : ',';
+  let delim = '\t';
+  if(!line.includes('\t')){
+    delim = line.includes(',') ? ',' : /\s{2,}/;
+  }
   return line.split(delim).map(c=>c.trim().replace(/^"|"$/g,''));
 }
 function normSource(v){
@@ -936,6 +939,10 @@ async function bulkImport(){
   if(lines.length<2){ resultBox.textContent='Paste a header row plus at least one data row.'; return; }
 
   const headerCols = splitRow(lines[0]);
+  if(headerCols.length<2){
+    resultBox.innerHTML = 'Your header row looks like one unbroken block of text — no tabs, commas, or clear spacing found between column names. This usually happens when copying from a web table (SharePoint, a webpage) instead of real Excel cells. Try copying directly from Excel/Google Sheets, or separate each column name with a comma.';
+    return;
+  }
   const fieldForCol = headerCols.map(matchHeader);
   if(!fieldForCol.includes('name') || !fieldForCol.includes('number') || !fieldForCol.includes('link')){
     resultBox.innerHTML = 'Could not find <b>Subject</b>, <b>Sr. No.</b> and <b>Pdf Access</b> columns in the first row — make sure you pasted the header row from your sheet.';
